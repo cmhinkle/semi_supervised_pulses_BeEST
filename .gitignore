@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Virtual environments
+.venv/
+venv/
+
+# Large experiment data
+*.npy
+*.npz
+*.h5
+*.hdf5
+*.tdms
+*.pkl
+
+# Processing outputs
+# results/
+# models/
+
+# Temporary files
+*.log
+*.tmp
+
+# OS/editor files
+.DS_Store
+.vscode/
