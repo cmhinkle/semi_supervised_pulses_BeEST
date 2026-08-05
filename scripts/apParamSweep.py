@@ -107,7 +107,7 @@ def _arg_config():
 
 ########################################################################################################################################
 
-def run_ap(params, S, args, save_ap=False, save_dir=''):
+def run_ap(params, S, args, save_ap=False):
     pref = params["preference"]
     damping = params["damping"]
 
@@ -297,6 +297,12 @@ def main():
     save_loc, save_loc_ap = make_save_name(args)
         
     results_df = pd.DataFrame(results)
+
+    results_df.to_pickle(save_loc)
+
+    print(f"AP grid search saved at {save_loc}")
+
+    # Save best AP model
     
     best_point = get_best_point(
         results_df,
@@ -311,7 +317,8 @@ def main():
     ap_best, labels_best = run_ap(
         best_params,
         S,
-        args
+        args,
+        save_ap=True
     )
     
     joblib.dump(
@@ -328,10 +335,7 @@ def main():
         },
         save_loc_ap
     )
-    
-    results_df.to_pickle(save_loc)
-    
-    print(f"AP grid search saved at {save_loc}")
+        
     print(f"Best AP model saved at {save_loc_ap}")
     
 
