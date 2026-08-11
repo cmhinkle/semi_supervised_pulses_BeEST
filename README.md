@@ -4,4 +4,4 @@ This repo contains the code for the semi-supervised classification of STJ pulses
 
 The `semisupervsied.ipynb` notebook provides an overview on the process and the report explains each step in more detail. 
 
-Python scripts and some outsptus can be found as well.
+Python scripts and some outputs can be found as well.
