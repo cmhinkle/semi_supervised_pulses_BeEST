@@ -15,6 +15,7 @@ venv/
 *.hdf5
 *.tdms
 *.pkl
+data/
 
 # Processing outputs
 # results/
