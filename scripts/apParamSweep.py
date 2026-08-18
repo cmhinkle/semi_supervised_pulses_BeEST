@@ -1,6 +1,6 @@
 ###############################################
 # Original author: Calvin Hinkle
-# Last modified date: 8/4/2026 
+# Last modified date: 8/18/2026 
 # Description: 
 # Load pulses from a npy array,
 # preprocess the pulses using a DWT and min/max
@@ -8,7 +8,22 @@
 # AP clustering.
 # Returns/saves: 
 # parameter search grid as pandas df 
-# the best AP model as a pkl
+# including information on cluster structure and convergence
+#
+# AP solutions can be evaluated using (not here):
+# clustering stability
+# cluter size distribution (max, min, mean, median)
+# physical association with laser, multiplicity, energy, etc
+# manual interpretibilty 
+# single, pileup, etc
+# downstream SVM performance 
+
+# we should select based on (not here):
+# convergance
+# stability (high mean ARI + low ARI variance) --> future script
+# minimal number of singleton clusters
+# physical association with laser, multiplicity, energy, etc --> future script
+# SVM performance
 
 ###############################################
 
@@ -22,7 +37,6 @@ from sklearn.metrics import pairwise_distances
 from joblib import Parallel, delayed
 from sklearn.cluster import AffinityPropagation
 from sklearn.model_selection import ParameterGrid
-import joblib
 
 ########################################################################################################################################
 
@@ -61,18 +75,18 @@ def _arg_config():
         required=False,
         help='Minimum and maximum preference values. '
              'Must provide exactly two values. '
-             'Default: [-10, min(S)]'
+             'Default: [5th, 50th] percentiles of off-diagonal similarities'
     )  
     parser.add_argument(
         '--damp_range',
         nargs=2,
         metavar=('MIN', 'MAX'),
         type=float,
-        default=[0.75, 0.99],
+        default=[0.85, 0.99],
         required=False,
         help='Minimum and maximum damping values. '
              'Must provide exactly two values. '
-             'Default: [0.75, 0.99]'
+             'Default: [0.85, 0.99]'
     )
     parser.add_argument(
         '--seed',
@@ -95,78 +109,8 @@ def _arg_config():
         required=False,
         help='Number of iterations with no change in the number of estimated clusters that stops the convergence'
     )
-    parser.add_argument(
-        '--target_clusters',
-        type=int,
-        default=100,
-        required=False,
-        help='Target number of clusters for AP'
-    )
 
     return parser
-
-########################################################################################################################################
-
-def run_ap(params, S, args, save_ap=False):
-    pref = params["preference"]
-    damping = params["damping"]
-
-    try:
-        ap = AffinityPropagation(
-            preference=pref,
-            damping=damping,
-            affinity='precomputed', #pass S for precomputed, would need to change how S is computed for pref values
-            #affinity='euclidean',
-            random_state=args.seed,
-            max_iter=args.max_iter,
-            convergence_iter=args.converge_iter
-        )
-
-        labels = ap.fit_predict(S)
-
-        converged = ap.n_iter_ < ap.max_iter
-
-        if save_ap:
-            return ap, labels
-
-        if converged:
-            n_clusters = len(np.unique(labels))
-        else:
-            n_clusters = np.nan
-        return {
-            "preference": pref,
-            "damping": damping,
-            "n_clusters": n_clusters,
-            "converged": converged
-        }
-
-    except Exception as e:
-        if save_ap:
-            raise RuntimeError(f"Final AP fit failed: {e}")
-            
-        print(e)        
-        return {
-            "preference": pref,
-            "damping": damping,
-            "n_clusters": np.nan,
-            "converged": False
-        }
-
-########################################################################################################################################
-
-def get_best_point(results_df, target_clusters):
-    valid_df = results_df.dropna(subset=["n_clusters"]).copy()
-
-    if len(valid_df) == 0:
-        raise RuntimeError("No AP runs converged.")
-
-    best_idx = (
-        (valid_df["n_clusters"] - target_clusters)
-        .abs()
-        .idxmin()
-    )
-
-    return valid_df.loc[best_idx]
 
 ########################################################################################################################################
 
@@ -219,30 +163,88 @@ def make_save_name(args):
     save_dir = args.save_directory.rstrip("/")
 
     save_loc = os.path.join(save_dir, f"{base_name}.pkl")
-    save_loc_ap = os.path.join(
-        save_dir,
-        f"{base_name.replace('_ap_grid_', '_best_ap_')}.pkl"
-    )
 
     # Avoid overwriting existing files
     count = 1
-    while os.path.exists(save_loc) or os.path.exists(save_loc_ap):
+    while os.path.exists(save_loc):
         save_loc = os.path.join(
             save_dir, f"{base_name}_{count}.pkl"
         )
-        save_loc_ap = os.path.join(
-            save_dir,
-            f"{base_name.replace('_ap_grid_', '_best_ap_')}_{count}.pkl"
-        )
+
         count += 1
 
-    return save_loc, save_loc_ap
+    return save_loc
 
 ########################################################################################################################################
 
+def run_ap(params, S, args):
+    pref = params["preference"]
+    damping = params["damping"]
 
-    # NOTE: write out the logic here, then write functions for the logic. 
+    try:
+        ap = AffinityPropagation(
+            preference=pref,
+            damping=damping,
+            affinity='precomputed', #pass S for precomputed, would need to change how S is computed for pref values
+            #affinity='euclidean',
+            random_state=args.seed,
+            max_iter=args.max_iter,
+            convergence_iter=args.converge_iter
+        )
+
+        labels = ap.fit_predict(S)
+
+        # Convergence is required before cluster-structure metrics are valid
+        converged = ap.n_iter_ < ap.max_iter
+
+        cluster_sizes = np.bincount(labels)
+
+        if converged:
+            n_clusters = len(np.unique(labels))
+        else:
+            n_clusters = np.nan
+        return {
+            "preference": pref,
+            "damping": damping,
+            "seed": args.seed,
+            "n_clusters": n_clusters,
+            "converged": converged,
+            "n_iter": ap.n_iter_,
+            "n_singleton_clusters": np.sum(cluster_sizes == 1),
+            "fraction_singleton_clusters": np.sum(cluster_sizes == 1) / n_clusters if n_clusters > 0 else np.nan,
+            "fraction_singleton_events": np.sum(cluster_sizes == 1) / len(labels) if len(labels) > 0 else np.nan,
+            "min_cluster_size": np.min(cluster_sizes) if n_clusters > 0 else np.nan,
+            "max_cluster_size": np.max(cluster_sizes) if n_clusters > 0 else np.nan,
+            "mean_cluster_size": np.mean(cluster_sizes) if n_clusters > 0 else np.nan,
+            "median_cluster_size": np.median(cluster_sizes) if n_clusters > 0 else np.nan 
+        }
+
+    except Exception as e:
+        if save_ap:
+            raise RuntimeError(f"Final AP fit failed: {e}")
+            
+        print(e)        
+        return {
+            "preference": pref,
+            "damping": damping,
+            "seed": args.seed,
+            "n_clusters": np.nan,
+            "converged": False,
+            "n_iter": np.nan,
+            "n_singleton_clusters": np.nan,
+            "fraction_singleton_clusters": np.nan,
+            "fraction_singleton_events": np.nan,
+            "min_cluster_size": np.nan,
+            "max_cluster_size": np.nan,
+            "mean_cluster_size": np.nan,
+            "median_cluster_size": np.nan 
+        }
+
+
+########################################################################################################################################
+
 def main():
+
     # Parse arguments
     args = _arg_config().parse_args()
 
@@ -294,7 +296,8 @@ def main():
     )
 
     # Save results from AP param search
-    save_loc, save_loc_ap = make_save_name(args)
+
+    save_loc = make_save_name(args)
         
     results_df = pd.DataFrame(results)
 
@@ -302,45 +305,9 @@ def main():
 
     print(f"AP grid search saved at {save_loc}")
 
-    # Save best AP model
-    
-    best_point = get_best_point(
-        results_df,
-        args.target_clusters
-    )
-    
-    best_params = {
-        "preference": best_point["preference"],
-        "damping": best_point["damping"]
-    }
-    
-    ap_best, labels_best = run_ap(
-        best_params,
-        S,
-        args,
-        save_ap=True
-    )
-    
-    joblib.dump(
-        {
-            "model": ap_best,
-            "labels": labels_best,
-            "best_params": best_params,
-            "target_clusters": args.target_clusters,
-            "wavelet": "haar",
-            "dwt_level": 3,
-            "similarity_metric": "l1",
-            "normalization": "max_abs",
-            "median_similarity": np.median(S[~np.eye(len(S), dtype=bool)])
-        },
-        save_loc_ap
-    )
-        
-    print(f"Best AP model saved at {save_loc_ap}")
-    
+
 
 ########################################################################################################################################
 
 if __name__ == '__main__':
     main()
-

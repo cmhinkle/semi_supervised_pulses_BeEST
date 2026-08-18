@@ -10,7 +10,7 @@ __pycache__/
 venv/
 
 # Large experiment data
-*.npy
+# *.npy
 *.npz
 *.h5
 *.hdf5
