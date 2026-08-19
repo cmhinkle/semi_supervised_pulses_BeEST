@@ -91,9 +91,10 @@ def _arg_config():
     parser.add_argument(
         '--seed',
         type=int,
-        default=None,
+        default=23,
         required=False,
         help='Random seed'
+            'Default = 23'
     )
     parser.add_argument(
         '--max_iter',
@@ -180,6 +181,7 @@ def make_save_name(args):
 def run_ap(params, S, args):
     pref = params["preference"]
     damping = params["damping"]
+    seed = args.seed
 
     try:
         ap = AffinityPropagation(
@@ -187,7 +189,7 @@ def run_ap(params, S, args):
             damping=damping,
             affinity='precomputed', #pass S for precomputed, would need to change how S is computed for pref values
             #affinity='euclidean',
-            random_state=args.seed,
+            random_state=seed,
             max_iter=args.max_iter,
             convergence_iter=args.converge_iter
         )
@@ -206,7 +208,7 @@ def run_ap(params, S, args):
         return {
             "preference": pref,
             "damping": damping,
-            "seed": ap.random_state,
+            "seed": seed,
             "n_clusters": n_clusters,
             "converged": converged,
             "n_iter": ap.n_iter_,
@@ -227,7 +229,7 @@ def run_ap(params, S, args):
         return {
             "preference": pref,
             "damping": damping,
-            "seed": ap.random_state,
+            "seed": seed,
             "n_clusters": np.nan,
             "converged": False,
             "n_iter": np.nan,
@@ -249,9 +251,6 @@ def main():
     args = _arg_config().parse_args()
 
     os.makedirs(args.save_directory, exist_ok=True)
-
-    if args.seed is not None:
-        np.random.seed(args.seed)
 
     # Preprocess
     pulses = np.load(args.pulse_file)
