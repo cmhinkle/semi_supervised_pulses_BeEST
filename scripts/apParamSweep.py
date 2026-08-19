@@ -206,7 +206,7 @@ def run_ap(params, S, args):
         return {
             "preference": pref,
             "damping": damping,
-            "seed": args.seed,
+            "seed": ap.random_state,
             "n_clusters": n_clusters,
             "converged": converged,
             "n_iter": ap.n_iter_,
@@ -227,7 +227,7 @@ def run_ap(params, S, args):
         return {
             "preference": pref,
             "damping": damping,
-            "seed": args.seed,
+            "seed": ap.random_state,
             "n_clusters": np.nan,
             "converged": False,
             "n_iter": np.nan,
