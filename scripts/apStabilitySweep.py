@@ -66,8 +66,8 @@ def _arg_config():
         required=False
     )
     parser.add_argument(
-        '--threads',
-        help='Max threads to launch. Max 48 on CRONOS',
+        '--n_jobs',
+        help='Number of jobs to launch. Max 48 on CRONOS',
         default=20,
         required=False,
         type=int
@@ -197,6 +197,7 @@ def run_ap(params, S, args):
         )
 
         labels = ap.fit_predict(S)
+        labels = labels.astype(np.int32, copy=False)
 
         # Convergence is required before cluster-structure metrics are valid
         converged = ap.n_iter_ < ap.max_iter
@@ -211,6 +212,7 @@ def run_ap(params, S, args):
             "preference": pref,
             "damping": damping,
             "seed": seed,
+            "labels": labels,
             "n_clusters": n_clusters,
             "converged": converged,
             "n_iter": ap.n_iter_,
@@ -224,14 +226,14 @@ def run_ap(params, S, args):
         }
 
     except Exception as e:
-        if save_ap:
-            raise RuntimeError(f"Final AP fit failed: {e}")
+        raise RuntimeError(f"Final AP fit failed: {e}")
             
         print(e)        
         return {
             "preference": pref,
             "damping": damping,
             "seed": seed,
+            "labels": None,
             "n_clusters": np.nan,
             "converged": False,
             "n_iter": np.nan,
@@ -281,7 +283,7 @@ def main():
 
     # AP grid search
     results = Parallel(
-        n_jobs=args.threads, 
+        n_jobs=args.n_jobs, 
         verbose=10
     )(
         delayed(run_ap)(

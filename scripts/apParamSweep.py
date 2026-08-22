@@ -61,8 +61,8 @@ def _arg_config():
         required=False
     )
     parser.add_argument(
-        '--threads',
-        help='Max threads to launch. Max 48 on CRONOS',
+        '--n_jobs',
+        help='Number of jobs to launch. Max 48 on CRONOS',
         default=20,
         required=False,
         type=int
@@ -222,8 +222,7 @@ def run_ap(params, S, args):
         }
 
     except Exception as e:
-        if save_ap:
-            raise RuntimeError(f"Final AP fit failed: {e}")
+        raise RuntimeError(f"Final AP fit failed: {e}")
             
         print(e)        
         return {
@@ -284,7 +283,7 @@ def main():
 
     # AP grid search
     results = Parallel(
-        n_jobs=args.threads, 
+        n_jobs=args.n_jobs, 
         verbose=10
     )(
         delayed(run_ap)(
